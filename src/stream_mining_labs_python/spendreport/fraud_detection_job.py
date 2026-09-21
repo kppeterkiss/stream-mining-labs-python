@@ -10,6 +10,7 @@ from pyflink.datastream.functions import KeyedProcessFunction, RuntimeContext
 from pyflink.datastream.state import ValueStateDescriptor
 
 from stream_mining_labs_python.spendreport.fraud_detector import FraudDetector
+from stream_mining_labs_python.spendreport.transaction_sink import TransactionPrinterSink, FlexiblePythonSinkMap
 from stream_mining_labs_python.spendreport.transaction_source import (
     DEFAULT_FRAUD_PROBABILITY,
     transaction_source,
@@ -124,8 +125,10 @@ def main() -> None:
     alerts.map(
         lambda account_id: f"ALERT account_id={account_id}",
         output_type=Types.STRING(),
-    ).print()
-
+    ).map(
+        FlexiblePythonSinkMap(mode='file', file_path='alerts.txt'),
+        output_type=Types.STRING()
+    ).add_sink(TransactionPrinterSink())
     env.execute("Fraud Detection")
 
 

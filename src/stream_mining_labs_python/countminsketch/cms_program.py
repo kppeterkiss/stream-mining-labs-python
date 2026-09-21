@@ -15,12 +15,16 @@ class CMSProcess(KeyedProcessFunction):
     def __init__(self, row_count: int = 5, column_count: int = 12) -> None:
         self.row_count = row_count
         self.column_count = column_count
+        self.hashes = None
+
 
     def open(self, runtime_context: RuntimeContext) -> None:
         # Keyed ValueState: each key gets its own CMS table snapshot.
         self.table_state = runtime_context.get_state(
             ValueStateDescriptor("cms-table", Types.LIST(Types.INT()))
         )
+        self.hashes = SetOfHashes(self.row_count, self.column_count, seed=42).hashes
+
 
     def process_element(self, value: str, ctx: KeyedProcessFunction.Context):
         if not value:
@@ -31,11 +35,10 @@ class CMSProcess(KeyedProcessFunction):
             table = [0] * (self.row_count * self.column_count)
 
         # Deterministic row hash functions per key; table remains the only persisted state.
-        key = int(ctx.get_current_key())
-        hashes = SetOfHashes(self.row_count, self.column_count, seed=key * 1000003).hashes
+        #key = int(ctx.get_current_key())
 
         indices = []
-        for row_idx, hash_fn in enumerate(hashes):
+        for row_idx, hash_fn in enumerate(self.hashes):
             col_idx = hash_fn.get_hash(value)
             flat_idx = row_idx * self.column_count + col_idx
             table[flat_idx] += 1
