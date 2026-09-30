@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import argparse
 
-from pyflink.common import Types
+from pyflink.common import Types, WatermarkStrategy
 from pyflink.datastream import StreamExecutionEnvironment
+from pyflink.datastream.connectors.file_system import StreamFormat, FileSource
 from pyflink.datastream.functions import KeyedProcessFunction, RuntimeContext
 from pyflink.datastream.state import ValueStateDescriptor
 
@@ -61,12 +62,15 @@ def main() -> None:
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_parallelism(args.parallelism)
 
-    input_stream = get_text_stream(
-        env,
-        args.source,
-        host=args.host,
-        port=args.port,
-        input_path=args.input,
+    file_source = FileSource.for_record_stream_format(
+        StreamFormat.text_line_format(),
+        args.input
+    ).process_static_file_set().build()
+
+    input_stream = env.from_source(
+        source=file_source,
+        watermark_strategy=WatermarkStrategy.for_monotonous_timestamps(),
+        source_name="file_source"
     )
 
     filtered = (

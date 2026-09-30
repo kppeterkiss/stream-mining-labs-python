@@ -88,7 +88,7 @@ def main() -> None:
     parser.add_argument(
         "--records",
         type=int,
-        default=5000,
+        default=100,
         help="Number of generated transactions to process",
     )
     parser.add_argument("--parallelism", type=int, default=1)
@@ -108,16 +108,18 @@ def main() -> None:
             args.records,
         )
     ]
+    print(generated_transactions)
 
     transactions = env.from_collection(
         generated_transactions,
-        type_info=Types.TUPLE([Types.LONG(), Types.FLOAT()]),
+        type_info=Types.TUPLE([Types.INT(), Types.DOUBLE()]),
     ).map(
         lambda tx: _throttle_and_pass(tx, args.delay),
-        output_type=Types.TUPLE([Types.LONG(), Types.FLOAT()]),
+        output_type=Types.TUPLE([Types.INT(), Types.DOUBLE()]),
     )
 
-    alerts = transactions.key_by(lambda t: t[0], key_type=Types.LONG()).process(
+
+    alerts = transactions.key_by(lambda t: t[0], key_type=Types.INT()).process(
         FraudDetectorProcess(),
         output_type=Types.LONG(),
     )
@@ -128,7 +130,7 @@ def main() -> None:
     ).map(
         FlexiblePythonSinkMap(mode='file', file_path='alerts.txt'),
         output_type=Types.STRING()
-    ).add_sink(TransactionPrinterSink())
+    ).print()
     env.execute("Fraud Detection")
 
 

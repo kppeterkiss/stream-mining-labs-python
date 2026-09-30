@@ -20,7 +20,7 @@ def get_text_stream(
     """
     if source == "file":
         print(' *** using file source *** ')
-        return env.read_text_file(input_path)
+        return env.r
 
     if hasattr(env, "socket_text_stream"):
         print(' *** using file source *** ')
