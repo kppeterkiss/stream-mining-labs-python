@@ -6,7 +6,7 @@ from pyflink.datastream.functions import MapFunction
 from river import linear_model, metrics
 
 
-# 1. ADATGENERÁTOR (Ciklikus szimuláció)
+# 1. Data generation  (Cyclical symulation)
 def generate_transaction_stream(records_limit=100):
     # (amount, distance_from_home, is_fraud)
     base_data = [
@@ -16,28 +16,29 @@ def generate_transaction_stream(records_limit=100):
     return list(itertools.islice(itertools.cycle(base_data), records_limit))
 
 
-# 2. SINK/PROCESSZOR FUNKCIÓ (River Online Classifier)
+# 2. processor function (River Online Classifier)
 class StreamingFraudClassifier(MapFunction):
     def open(self, context):
-        # A River online logisztikus regressziós modellje
+        #  River online logistic regression
         self.model = linear_model.LogisticRegression()
-        # Valós idejű ROC-AUC metrika követés
+        # Real time ROC-AUC metrics
         self.metric = metrics.ROCAUC()
 
     def map(self, value):
-        # Lassítás a streaming élmény kedvéért
+        # throttle
         time.sleep(0.05)
 
-        # Tuple kicsomagolása
+        # extract Tuple
         amount, distance, label = value
         features = {"amount": amount, "distance": distance}
         target = bool(label)
 
-        # A. ONLINE INFERENCE: Predikció a beérkező adaton
+        # A. ONLINE INFERENCE: prediction
         prediction = self.model.predict_proba_one(features)
+        # prediction is a dict, making sure we get the result with following line
         fraud_probability = prediction.get(True, 0.0)
 
-        # B. ONLINE TRAINING: A modell azonnali frissítése a látott pontból
+        # B. ONLINE TRAINING: refresh model on a single datapoint
         self.model.learn_one(features, target)
         self.metric.update(target, prediction)
 

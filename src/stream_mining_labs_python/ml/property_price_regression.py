@@ -17,10 +17,9 @@ def generate_property_stream(records_limit=100):
 
 class StreamingPropertyRegressor(MapFunction):
     def open(self, context):
-        # River Pipeline: Először skálázunk (StandardScaler), utána jön a regresszió
-        # Ez megvédi a modellt attól, hogy a nagy számok (árak/sqm) eltorzítsák a tanulást
+        # River Pipeline: First scaling (StandardScaler), then regression
         self.pipeline = preprocessing.StandardScaler() | linear_model.LinearRegression()
-        # Valós idejű Abszolút Hiba (MAE) követése
+        # Real time (MAE)
         self.metric = metrics.MAE()
 
     def map(self, value):
@@ -28,10 +27,10 @@ class StreamingPropertyRegressor(MapFunction):
         sqm, rooms, price = value
         features = {"sqm": sqm, "rooms": rooms}
 
-        # A. ONLINE INFERENCE: Árbecslés
+        # A. ONLINE INFERENCE: price prediction
         predicted_price = self.pipeline.predict_one(features)
 
-        # B. ONLINE TRAINING: Súlyok frissítése és hiba kalkuláció
+        # B. ONLINE TRAINING:refresh model and calculating error
         self.pipeline.learn_one(features, price)
         self.metric.update(price, predicted_price)
 

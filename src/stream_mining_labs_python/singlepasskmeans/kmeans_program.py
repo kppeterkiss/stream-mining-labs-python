@@ -10,7 +10,7 @@ from pyflink.common.time import Time
 from typing import Iterable
 
 
-# 1. ADATGENERÁTOR (Teljesen jó, marad!)
+# 1. DATA GENERATOR
 def generate_raw_points(records_limit=100):
     base_points = [
         (10.2, 9.8), (9.5, 10.5), (12.1, 11.2),  # 1. klaszter
@@ -25,7 +25,7 @@ def throttle_points(point, delay_s=0.05):
     return point
 
 
-# 2. JAVÍTOTT K-MEANS MOTOR
+# 2. K_MEANS
 class StreamingKMeansProcessor(ProcessWindowFunction):
     def __init__(self, k=2, decay=0.7):
         self.k = k
@@ -33,8 +33,7 @@ class StreamingKMeansProcessor(ProcessWindowFunction):
         self.centroids_state = None
 
     def open(self, context):
-        # BOMBABIZTOS JAVÍTÁS 1: Types.LIST helyett PICKLED_BYTE_ARRAY-t használunk!
-        # Ez garantálja, hogy a Flink hiba nélkül el tudja menteni a Python listánkat.
+        # new way for ValueState definition: saferfor  Java conversion
         state_descriptor = ValueStateDescriptor(
             "centroids",
             Types.PICKLED_BYTE_ARRAY()
@@ -42,14 +41,14 @@ class StreamingKMeansProcessor(ProcessWindowFunction):
         self.centroids_state = context.get_state(state_descriptor)
 
     def process(self, key, context, elements: Iterable) -> Iterable:
-        # Állapot kiolvasása
+        # Read ValueState
         current_centroids = self.centroids_state.value()
         if current_centroids is None:
             current_centroids = [(0.0, 0.0), (100.0, 100.0)]  # Kezdőpontok
 
         points = list(elements)
 
-        # E-lépés: Pontok hozzárendelése
+        # E-step: Assigning points to  centroids
         assignments = {i: [] for i in range(self.k)}
         for px, py in points:
             best_idx = -1
@@ -61,7 +60,7 @@ class StreamingKMeansProcessor(ProcessWindowFunction):
                     best_idx = i
             assignments[best_idx].append((px, py))
 
-        # M-lépés: Centroid frissítés lecsengéssel (Decay)
+        # M-step: Centroid refreshment with decay
         next_centroids = []
         for i in range(self.k):
             cx, cy = current_centroids[i]
@@ -78,13 +77,12 @@ class StreamingKMeansProcessor(ProcessWindowFunction):
 
             next_centroids.append((new_x, new_y))
 
-        # Mentés az állapotba
+        # Saving into ValueState
         self.centroids_state.update(next_centroids)
 
         window_end = context.current_processing_time()
         output_str = f"[Window End: {window_end}] Centroids: 0->({next_centroids[0][0]:.2f}, {next_centroids[0][1]:.2f}) | 1->({next_centroids[1][0]:.2f}, {next_centroids[1][1]:.2f}) [Batch size: {len(points)}]"
 
-        # JAVÍTÁS 2: Sima listaként adjuk vissza a szöveget a yield helyett a stabilabb API transzlációért
         return [output_str]
 
 
@@ -103,10 +101,9 @@ def run_kmeans():
         output_type=Types.TUPLE([Types.DOUBLE(), Types.DOUBLE()])
     )
 
-    # Fix mesterséges kulcs a KeyedStream-hez
     keyed_stream = throttled_stream.key_by(lambda x: 0, key_type=Types.INT())
 
-    # 3 másodperces Tumbling ablak
+    #
     #windowed_stream = keyed_stream.window(TumblingProcessingTimeWindows.of(Time.seconds(3)))
     windowed_stream = keyed_stream.count_window(size=20)
     result = windowed_stream.process(
